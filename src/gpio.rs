@@ -244,7 +244,7 @@ pub trait UartPin<SIG> {}
 pub use self::pin::*;
 
 macro_rules! impl_glb {
-    ($($Pini: ident: ($pini: ident, $gpio_cfgctli: ident, $UartSigi: ident, $sigi: ident, $spi_kind: ident, $i2c_kind: ident, $gpio_i: ident, $gpio_int_mode_seti: ident) ,)+) => {
+    ($($Pini: ident: ($pin_idx: literal, $pini: ident, $gpio_cfgctli: ident, $UartSigi: ident, $sigi: ident, $spi_kind: ident, $i2c_kind: ident, $gpio_i: ident, $gpio_int_mode_seti: ident) ,)+) => {
         impl GlbExt for pac::GLB {
             fn split(self) -> Parts {
                 Parts {
@@ -306,6 +306,38 @@ macro_rules! impl_glb {
             trait InternalStatefulOutputImp {
                 fn is_output_high_inner(&self) -> bool;
                 fn is_output_low_inner(&self) -> bool;
+            }
+
+            /// Type erased pin
+            pub struct EPin<MODE> {
+                pin_index: usize,
+                _mode: PhantomData<MODE>,
+            }
+
+            impl<MODE> InternalOutputPinImp for EPin<Output<MODE>> {
+                fn set_high_inner(&self) {
+                    let glb = unsafe { &*pac::GLB::ptr() };
+                    glb.gpio_cfgctl32.modify(|r, w| unsafe { w.bits(r.bits() | (1 << self.pin_index)) });
+                }
+
+                fn set_low_inner(&self) {
+                    let glb = unsafe { &*pac::GLB::ptr() };
+                    glb.gpio_cfgctl32.modify(|r, w| unsafe { w.bits(r.bits() & ( !(1 << self.pin_index))) });
+                }
+            }
+
+            impl<MODE> OutputPin for EPin<Output<MODE>> {
+                type Error = Infallible;
+
+                fn set_high(&mut self) -> Result<(), Self::Error> {
+                    self.set_high_inner();
+                    Ok(())
+                }
+
+                fn set_low(&mut self) -> Result<(), Self::Error> {
+                    self.set_low_inner();
+                    Ok(())
+                }
             }
 
             $(
@@ -538,6 +570,11 @@ macro_rules! impl_glb {
                 }
             }
 
+            impl<MODE> $Pini<Output<MODE>> {
+                pub fn erase(self) -> EPin<Output<MODE>> {
+                    EPin::<Output<MODE>> { pin_index: $pin_idx, _mode: PhantomData }
+                }
+            }
 
             impl<MODE> OutputPin for $Pini<Output<MODE>> {
                 type Error = Infallible;
@@ -622,27 +659,27 @@ macro_rules! impl_glb {
 // There are Pin0 to Pin22, totally 23 pins
 // todo: generate macros
 impl_glb! {
-    Pin0: (pin0, gpio_cfgctl0, UartSig0, sig0, miso, scl, gpio_0, gpio_int_mode_set1),
-    Pin1: (pin1, gpio_cfgctl0, UartSig1, sig1, mosi, sda, gpio_1, gpio_int_mode_set1),
-    Pin2: (pin2, gpio_cfgctl1, UartSig2, sig2, ss, scl, gpio_2, gpio_int_mode_set1),
-    Pin3: (pin3, gpio_cfgctl1, UartSig3, sig3, sclk, sda, gpio_3, gpio_int_mode_set1),
-    Pin4: (pin4, gpio_cfgctl2, UartSig4, sig4, miso, scl, gpio_4, gpio_int_mode_set1),
-    Pin5: (pin5, gpio_cfgctl2, UartSig5, sig5, mosi, sda, gpio_5, gpio_int_mode_set1),
-    Pin6: (pin6, gpio_cfgctl3, UartSig6, sig6, ss, scl, gpio_6, gpio_int_mode_set1),
-    Pin7: (pin7, gpio_cfgctl3, UartSig7, sig7, sclk, sda, gpio_7, gpio_int_mode_set1),
-    Pin8: (pin8, gpio_cfgctl4, UartSig0, sig0, miso, scl, gpio_8, gpio_int_mode_set1),
-    Pin9: (pin9, gpio_cfgctl4, UartSig1, sig1, mosi, sda, gpio_9, gpio_int_mode_set1),
-    Pin10: (pin10, gpio_cfgctl5, UartSig2, sig2, ss, scl, gpio_10, gpio_int_mode_set2),
-    Pin11: (pin11, gpio_cfgctl5, UartSig3, sig3, sclk, sda, gpio_11, gpio_int_mode_set2),
-    Pin12: (pin12, gpio_cfgctl6, UartSig4, sig4, miso, scl, gpio_12, gpio_int_mode_set2),
-    Pin13: (pin13, gpio_cfgctl6, UartSig5, sig5, mosi, sda, gpio_13, gpio_int_mode_set2),
-    Pin14: (pin14, gpio_cfgctl7, UartSig6, sig6, ss, scl, gpio_14, gpio_int_mode_set2),
-    Pin15: (pin15, gpio_cfgctl7, UartSig7, sig7, sclk, sda, gpio_15, gpio_int_mode_set2),
-    Pin16: (pin16, gpio_cfgctl8, UartSig0, sig0, miso, scl, gpio_16, gpio_int_mode_set2),
-    Pin17: (pin17, gpio_cfgctl8, UartSig1, sig1, mosi, sda, gpio_17, gpio_int_mode_set2),
-    Pin18: (pin18, gpio_cfgctl9, UartSig2, sig2, ss, scl, gpio_18, gpio_int_mode_set2),
-    Pin19: (pin19, gpio_cfgctl9, UartSig3, sig3, sclk, sda, gpio_19, gpio_int_mode_set2),
-    Pin20: (pin20, gpio_cfgctl10, UartSig4, sig4, miso, scl, gpio_20, gpio_int_mode_set3),
-    Pin21: (pin21, gpio_cfgctl10, UartSig5, sig5, mosi, sda, gpio_21, gpio_int_mode_set3),
-    Pin22: (pin22, gpio_cfgctl11, UartSig6, sig6, ss, scl, gpio_22, gpio_int_mode_set3),
+    Pin0: (0, pin0, gpio_cfgctl0, UartSig0, sig0, miso, scl, gpio_0, gpio_int_mode_set1),
+    Pin1: (1, pin1, gpio_cfgctl0, UartSig1, sig1, mosi, sda, gpio_1, gpio_int_mode_set1),
+    Pin2: (2, pin2, gpio_cfgctl1, UartSig2, sig2, ss, scl, gpio_2, gpio_int_mode_set1),
+    Pin3: (3, pin3, gpio_cfgctl1, UartSig3, sig3, sclk, sda, gpio_3, gpio_int_mode_set1),
+    Pin4: (4, pin4, gpio_cfgctl2, UartSig4, sig4, miso, scl, gpio_4, gpio_int_mode_set1),
+    Pin5: (5, pin5, gpio_cfgctl2, UartSig5, sig5, mosi, sda, gpio_5, gpio_int_mode_set1),
+    Pin6: (6, pin6, gpio_cfgctl3, UartSig6, sig6, ss, scl, gpio_6, gpio_int_mode_set1),
+    Pin7: (7, pin7, gpio_cfgctl3, UartSig7, sig7, sclk, sda, gpio_7, gpio_int_mode_set1),
+    Pin8: (8, pin8, gpio_cfgctl4, UartSig0, sig0, miso, scl, gpio_8, gpio_int_mode_set1),
+    Pin9: (9, pin9, gpio_cfgctl4, UartSig1, sig1, mosi, sda, gpio_9, gpio_int_mode_set1),
+    Pin10: (10, pin10, gpio_cfgctl5, UartSig2, sig2, ss, scl, gpio_10, gpio_int_mode_set2),
+    Pin11: (11, pin11, gpio_cfgctl5, UartSig3, sig3, sclk, sda, gpio_11, gpio_int_mode_set2),
+    Pin12: (12, pin12, gpio_cfgctl6, UartSig4, sig4, miso, scl, gpio_12, gpio_int_mode_set2),
+    Pin13: (13, pin13, gpio_cfgctl6, UartSig5, sig5, mosi, sda, gpio_13, gpio_int_mode_set2),
+    Pin14: (14, pin14, gpio_cfgctl7, UartSig6, sig6, ss, scl, gpio_14, gpio_int_mode_set2),
+    Pin15: (15, pin15, gpio_cfgctl7, UartSig7, sig7, sclk, sda, gpio_15, gpio_int_mode_set2),
+    Pin16: (16, pin16, gpio_cfgctl8, UartSig0, sig0, miso, scl, gpio_16, gpio_int_mode_set2),
+    Pin17: (17, pin17, gpio_cfgctl8, UartSig1, sig1, mosi, sda, gpio_17, gpio_int_mode_set2),
+    Pin18: (18, pin18, gpio_cfgctl9, UartSig2, sig2, ss, scl, gpio_18, gpio_int_mode_set2),
+    Pin19: (19, pin19, gpio_cfgctl9, UartSig3, sig3, sclk, sda, gpio_19, gpio_int_mode_set2),
+    Pin20: (20, pin20, gpio_cfgctl10, UartSig4, sig4, miso, scl, gpio_20, gpio_int_mode_set3),
+    Pin21: (21, pin21, gpio_cfgctl10, UartSig5, sig5, mosi, sda, gpio_21, gpio_int_mode_set3),
+    Pin22: (22, pin22, gpio_cfgctl11, UartSig6, sig6, ss, scl, gpio_22, gpio_int_mode_set3),
 }
