@@ -3,7 +3,7 @@
 
 use bl602_hal as hal;
 use core::convert::Infallible;
-use embedded_hal::digital::blocking::OutputPin;
+use embedded_hal::digital::blocking::{InputPin, OutputPin};
 use hal::{
     prelude::*,
     pac,
@@ -56,12 +56,21 @@ fn main() -> ! {
     let p6 = gpio_pins.pin6.into_pull_down_output().erase();
     let p7 = gpio_pins.pin7.into_pull_down_output().erase();
 
-    // store as owned or reference
-    let mut pins = [p5, p6, p7];
+    let p8 = gpio_pins.pin8.into_pull_down_input().erase();
+    let p9 = gpio_pins.pin9.into_pull_down_input().erase();
+    let p10 = gpio_pins.pin10.into_pull_down_input().erase();
 
-    pins[0].set_high().ok();
+    // can be stored as owned or reference
+    let mut output_pins = [p5, p6, p7];
 
-    for pin in pins.iter_mut() {
+    // inputs and outputs both supported
+    let input_pins = [p8, p9, p10];
+
+    if let Ok(_) = input_pins[1].is_high() {
+        pins[0].set_high().ok();
+    }
+
+    for pin in output_pins.iter_mut() {
         pin.set_low().ok();
     }
 
