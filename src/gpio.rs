@@ -326,6 +326,17 @@ macro_rules! impl_glb {
                 }
             }
 
+            impl<MODE> InternalInputPinImpl for EPin<Input<MODE>> {
+                fn is_high_inner(&self) -> bool {
+                    let glb = unsafe { &*pac::GLB::ptr() };
+                    glb.gpio_cfgctl30.read().bits() & (1 << self.pin_index) > 0
+                }
+                fn is_low_inner(&self) -> bool {
+                    let glb = unsafe { &*pac::GLB::ptr() };
+                    glb.gpio_cfgctl30.read().bits() & (1 << self.pin_index) == 0
+                }
+            }
+
             impl<MODE> OutputPin for EPin<Output<MODE>> {
                 type Error = Infallible;
 
@@ -338,6 +349,19 @@ macro_rules! impl_glb {
                     self.set_low_inner();
                     Ok(())
                 }
+            }
+
+            impl<MODE> InputPin for EPin<Input<MODE>> {
+                type Error = Infallible;
+
+                fn is_high(&self) -> Result<bool, Self::Error> {
+                    Ok(self.is_high_inner())
+                }
+
+                fn is_low(&self) -> Result<bool, Self::Error> {
+                    Ok(self.is_low_inner())
+                }
+
             }
 
             $(
@@ -573,6 +597,12 @@ macro_rules! impl_glb {
             impl<MODE> $Pini<Output<MODE>> {
                 pub fn erase(self) -> EPin<Output<MODE>> {
                     EPin::<Output<MODE>> { pin_index: $pin_idx, _mode: PhantomData }
+                }
+            }
+
+            impl<MODE> $Pini<Input<MODE>> {
+                pub fn erase(self) -> EPin<Input<MODE>> {
+                    EPin::<Input<MODE>> { pin_index: $pin_idx, _mode: PhantomData }
                 }
             }
 
