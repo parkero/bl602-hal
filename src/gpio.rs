@@ -1,6 +1,7 @@
 //! General Purpose Input/Output
 use core::marker::PhantomData;
 
+pub mod erased;
 use crate::pac;
 
 /// Extension trait to split GLB peripheral into independent pins, registers and other modules
@@ -308,62 +309,6 @@ macro_rules! impl_glb {
                 fn is_output_low_inner(&self) -> bool;
             }
 
-            /// Type erased pin
-            pub struct EPin<MODE> {
-                pin_index: usize,
-                _mode: PhantomData<MODE>,
-            }
-
-            impl<MODE> InternalOutputPinImp for EPin<Output<MODE>> {
-                fn set_high_inner(&self) {
-                    let glb = unsafe { &*pac::GLB::ptr() };
-                    glb.gpio_cfgctl32.modify(|r, w| unsafe { w.bits(r.bits() | (1 << self.pin_index)) });
-                }
-
-                fn set_low_inner(&self) {
-                    let glb = unsafe { &*pac::GLB::ptr() };
-                    glb.gpio_cfgctl32.modify(|r, w| unsafe { w.bits(r.bits() & ( !(1 << self.pin_index))) });
-                }
-            }
-
-            impl<MODE> InternalInputPinImpl for EPin<Input<MODE>> {
-                fn is_high_inner(&self) -> bool {
-                    let glb = unsafe { &*pac::GLB::ptr() };
-                    glb.gpio_cfgctl30.read().bits() & (1 << self.pin_index) > 0
-                }
-                fn is_low_inner(&self) -> bool {
-                    let glb = unsafe { &*pac::GLB::ptr() };
-                    glb.gpio_cfgctl30.read().bits() & (1 << self.pin_index) == 0
-                }
-            }
-
-            impl<MODE> OutputPin for EPin<Output<MODE>> {
-                type Error = Infallible;
-
-                fn set_high(&mut self) -> Result<(), Self::Error> {
-                    self.set_high_inner();
-                    Ok(())
-                }
-
-                fn set_low(&mut self) -> Result<(), Self::Error> {
-                    self.set_low_inner();
-                    Ok(())
-                }
-            }
-
-            impl<MODE> InputPin for EPin<Input<MODE>> {
-                type Error = Infallible;
-
-                fn is_high(&self) -> Result<bool, Self::Error> {
-                    Ok(self.is_high_inner())
-                }
-
-                fn is_low(&self) -> Result<bool, Self::Error> {
-                    Ok(self.is_low_inner())
-                }
-
-            }
-
             $(
             /// Pin
             pub struct $Pini<MODE> {
@@ -461,6 +406,10 @@ macro_rules! impl_glb {
                         // 6 -> GPIO_FUN_I2C_x
                         self.into_pin_with_mode(6, true, false, true)
                     }
+                }
+
+                pub fn erase(self) -> erased::EPin<MODE> {
+                    erased::EPin::<MODE>::new($pin_idx)
                 }
             }
 
@@ -591,18 +540,6 @@ macro_rules! impl_glb {
 
                         glb.gpio_int_stat1.read().[<reg_ $gpio_i _interrupt_status>]().is_set()
                     }
-                }
-            }
-
-            impl<MODE> $Pini<Output<MODE>> {
-                pub fn erase(self) -> EPin<Output<MODE>> {
-                    EPin::<Output<MODE>> { pin_index: $pin_idx, _mode: PhantomData }
-                }
-            }
-
-            impl<MODE> $Pini<Input<MODE>> {
-                pub fn erase(self) -> EPin<Input<MODE>> {
-                    EPin::<Input<MODE>> { pin_index: $pin_idx, _mode: PhantomData }
                 }
             }
 
